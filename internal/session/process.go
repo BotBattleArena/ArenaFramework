@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"sync"
 
-	pb "github.com/BotBattleArena/ArenaFramework/gen/arena/v1"
+	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
 	"github.com/BotBattleArena/ArenaFramework/internal/protocol"
 )
 

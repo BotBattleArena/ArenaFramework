@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	pb "github.com/BotBattleArena/ArenaFramework/gen/arena/v1"
+	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
 	"google.golang.org/protobuf/proto"
 )
 

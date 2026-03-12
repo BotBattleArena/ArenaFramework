@@ -7,6 +7,13 @@
 *.dll
 *.so
 *.dylib
+bin/
+
+# Generated files
+gen/
+
+# Inputs
+inputs/
 
 # Test binary, built with `go test -c`
 *.test
@@ -19,6 +26,9 @@ profile.cov
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# Go module files
+go.sum
 
 # Go workspace file
 go.work
