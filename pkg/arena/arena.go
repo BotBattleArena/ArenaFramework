@@ -6,15 +6,15 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/BotBattleArena/ArenaFramework/gen/arena/v1"
+	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
 	"github.com/BotBattleArena/ArenaFramework/internal/session"
 )
 
 // Sentinel errors.
 var (
-	ErrNoInputDir  = errors.New("arena: InputDir must be set")
-	ErrNoAxes      = errors.New("arena: at least one axis must be defined")
-	ErrNotRunning  = errors.New("arena: not running")
+	ErrNoInputDir     = errors.New("arena: InputDir must be set")
+	ErrNoAxes         = errors.New("arena: at least one axis must be defined")
+	ErrNotRunning     = errors.New("arena: not running")
 	ErrAlreadyRunning = errors.New("arena: already running")
 )
 

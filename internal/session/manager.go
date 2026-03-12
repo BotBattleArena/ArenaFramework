@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	pb "github.com/BotBattleArena/ArenaFramework/gen/arena/v1"
+	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
 )
 
 // Manager manages all input processes (bot executables).
