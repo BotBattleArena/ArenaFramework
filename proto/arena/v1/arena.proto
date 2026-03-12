@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package arena.v1;
+
+option go_package = "github.com/BotBattleArena/ArenaFramework/gen/arena/v1;arenav1";
+
+// ServerMessage is sent from the game (host) to an input process (bot).
+message ServerMessage {
+    // Type of message: "start", "state", "end"
+    string type = 1;
+
+    // Game-specific state data (opaque bytes, defined by the game)
+    bytes state = 2;
+
+    // Axis definitions (sent only with type "start")
+    repeated Axis axes = 3;
+}
+
+// Axis defines a single input axis.
+message Axis {
+    // Name of the axis, e.g. "move_x", "shoot"
+    string name = 1;
+
+    // Default value for this axis (typically 0.0)
+    float value = 2;
+}
+
+// InputMessage is sent from an input process (bot) back to the game.
+message InputMessage {
+    // Axis values set by the input, e.g. {"move_x": 0.5, "shoot": 1.0}
+    // Values should be in the range [-1.0, 1.0]
+    map<string, float> axes = 1;
+}
