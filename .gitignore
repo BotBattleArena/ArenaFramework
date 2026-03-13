@@ -9,9 +9,6 @@
 *.dylib
 bin/
 
-# Generated files
-gen/
-
 # Inputs
 inputs/
 
