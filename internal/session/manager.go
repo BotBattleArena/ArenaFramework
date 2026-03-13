@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
 )
 
 // Manager manages all input processes (bot executables).
@@ -82,14 +80,14 @@ func (m *Manager) StopAll() {
 	}
 }
 
-// SendToAll sends a ServerMessage to all input processes.
-func (m *Manager) SendToAll(msg *pb.ServerMessage) error {
+// SendToAll sends a message to all input processes.
+func (m *Manager) SendToAll(msg interface{}) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	var errs []error
 	for _, proc := range m.processes {
-		if err := proc.SendServerMessage(msg); err != nil {
+		if err := proc.SendMessage(msg); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -99,8 +97,8 @@ func (m *Manager) SendToAll(msg *pb.ServerMessage) error {
 	return nil
 }
 
-// SendTo sends a ServerMessage to a specific input process.
-func (m *Manager) SendTo(id string, msg *pb.ServerMessage) error {
+// SendTo sends a message to a specific input process.
+func (m *Manager) SendTo(id string, msg interface{}) error {
 	m.mu.RLock()
 	proc, ok := m.processes[id]
 	m.mu.RUnlock()
@@ -108,20 +106,20 @@ func (m *Manager) SendTo(id string, msg *pb.ServerMessage) error {
 	if !ok {
 		return fmt.Errorf("unknown input: %s", id)
 	}
-	return proc.SendServerMessage(msg)
+	return proc.SendMessage(msg)
 }
 
-// ReadFrom reads an InputMessage from a specific input process.
+// ReadFrom reads a message from a specific input process into the given value.
 // This blocks until a message is received.
-func (m *Manager) ReadFrom(id string) (*pb.InputMessage, error) {
+func (m *Manager) ReadFrom(id string, v interface{}) error {
 	m.mu.RLock()
 	proc, ok := m.processes[id]
 	m.mu.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("unknown input: %s", id)
+		return fmt.Errorf("unknown input: %s", id)
 	}
-	return proc.ReadInputMessage()
+	return proc.ReadMessage(v)
 }
 
 // GetProcess returns a process by ID.
