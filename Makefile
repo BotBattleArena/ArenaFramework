@@ -9,26 +9,19 @@ build:
 	go build ./...
 
 # Build example binaries
-build-examples: build-go-examples build-python-bot
+build-examples: build-go-examples
 
 build-go-examples:
-	go build -o bin/tictactoe.exe ./cmd/tictactoe
-	go build -o bin/randombot.exe ./cmd/randombot
-
-build-python-bot:
-	@if not exist bin mkdir bin
-	pyinstaller --onefile --name randombot-python cmd/randombot-python/main.py
-	@move /y dist\randombot-python.exe bin\ >nul
-	@rmdir /s /q build
-	@rmdir /s /q dist
-	@del /q randombot-python.spec
+	go build -o bin/topdownshooter.exe ./cmd/topdownshooter
+	go build -o bin/shooterbot.exe ./cmd/shooterbot
+	go build -o bin/hunterbot.exe ./cmd/hunterbot
 
 # Run example: build randombot, set up inputs dir, run tictactoe
 run-example: build-examples
 	@if not exist inputs mkdir inputs
-	@copy /y bin\randombot.exe inputs\randombot-go.exe >nul
-	@copy /y bin\randombot-python.exe inputs\randombot-python.exe >nul
-	bin\tictactoe.exe
+	@copy /y bin\shooterbot.exe inputs\1shooterbot-go.exe >nul
+	@copy /y bin\hunterbot.exe inputs\2hunterbot-go.exe >nul
+	bin\topdownshooter.exe
 
 # Run tests
 test:

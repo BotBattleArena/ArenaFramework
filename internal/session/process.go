@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -21,14 +22,18 @@ type Process struct {
 	encoder *protocol.Encoder
 	decoder *protocol.Decoder
 
-	mu sync.Mutex
+	respCh chan json.RawMessage
+	stopCh chan struct{}
+	mu     sync.Mutex
 }
 
 // NewProcess creates a new Process for the given executable path.
 func NewProcess(id, path string) *Process {
 	return &Process{
-		ID:   id,
-		Path: path,
+		ID:     id,
+		Path:   path,
+		respCh: make(chan json.RawMessage, 1),
+		stopCh: make(chan struct{}),
 	}
 }
 
@@ -57,6 +62,9 @@ func (p *Process) Start() error {
 		return fmt.Errorf("start process %s (%s): %w", p.ID, p.Path, err)
 	}
 
+	// Start background reader
+	go p.readerLoop()
+
 	return nil
 }
 
@@ -75,22 +83,64 @@ func (p *Process) SendMessage(msg interface{}) error {
 	return nil
 }
 
+func (p *Process) readerLoop() {
+	for {
+		var msg json.RawMessage
+		if err := p.decoder.Decode(&msg); err != nil {
+			return // Pipe closed or error
+		}
+
+		select {
+		case p.respCh <- msg:
+		case <-p.stopCh:
+			return
+		default:
+			// If channel is full, discard the old message and put the new one.
+			// This ensures we always have the LATEST response if multiple arrive.
+			// However, in our RequestAxes flow, we should be careful.
+			select {
+			case <-p.respCh:
+			default:
+			}
+			select {
+			case p.respCh <- msg:
+			default:
+			}
+		}
+	}
+}
+
+// DrainResponses clears any pending messages in the response channel.
+func (p *Process) DrainResponses() {
+	for {
+		select {
+		case <-p.respCh:
+		default:
+			return
+		}
+	}
+}
+
 // ReadMessage reads a JSON message from the process's stdout into the given value.
-// This blocks until a message is available or the pipe is closed.
 func (p *Process) ReadMessage(v interface{}) error {
-	if p.decoder == nil {
-		return fmt.Errorf("process %s: decoder not available", p.ID)
+	select {
+	case data := <-p.respCh:
+		return json.Unmarshal(data, v)
+	case <-p.stopCh:
+		return io.EOF
 	}
-	if err := p.decoder.Decode(v); err != nil {
-		return fmt.Errorf("read from %s: %w", p.ID, err)
-	}
-	return nil
 }
 
 // Stop terminates the subprocess gracefully.
 func (p *Process) Stop() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	select {
+	case <-p.stopCh:
+	default:
+		close(p.stopCh)
+	}
 
 	if p.stdin != nil {
 		p.stdin.Close()
