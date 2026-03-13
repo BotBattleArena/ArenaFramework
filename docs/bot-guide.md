@@ -4,28 +4,29 @@ Diese Anleitung zeigt, wie man einen Input (Bot) für das ArenaFramework schreib
 
 ## Voraussetzungen
 
-- Du bekommst die Datei `proto/arena/v1/arena.proto` vom Spieleentwickler.
-- Du brauchst einen Protobuf-Compiler für deine Sprache.
+- Du musst JSON in deiner Programmiersprache verarbeiten können.
+- Dein Bot kommuniziert über **stdin** (Eingabe vom Spiel) und **stdout** (Ausgabe ans Spiel).
 
 ## Protokoll
 
 ### Wire-Format
 
-Jede Nachricht hat ein **Length-Prefix**:
+Das Framework nutzt **NDJSON** (Newline-Delimited JSON). Jede Nachricht ist ein einzelnes JSON-Objekt in einer Zeile, gefolgt von einem Newline-Charakter (`\n`).
 
-```
-[4 Bytes: Länge als uint32, Big-Endian][N Bytes: Protobuf-Payload]
-```
+- **Lesen**: Lies von stdin bis zum nächsten `\n`, parset dann den String als JSON.
+- **Schreiben**: Serialisiere dein JSON-Objekt zu einem String und schreibe ihn gefolgt von `\n` auf stdout. **Wichtig**: Nutze `flush`, um sicherzustellen, dass die Nachricht sofort gesendet wird.
 
 ### Nachrichten-Typen
 
+Das Schema der Nachrichten findest du in `docs/bot-schema.json`.
+
 **Vom Spiel empfangen (`ServerMessage`)**:
 
-| type     | Bedeutung                          |
-|----------|------------------------------------|
-| `start`  | Spiel startet, `axes` enthält die verfügbaren Achsen |
-| `state`  | Neuer Spielzustand in `state` (Bytes) |
-| `end`    | Spiel ist vorbei                   |
+| Feld   | Typ      | Bedeutung                                   |
+|--------|----------|---------------------------------------------|
+| `type` | `string` | `start` (Initial), `state` (Update), `end` (Ende) |
+| `axes` | `array`  | Liste der verfügbaren Achsen (nur bei `start`) |
+| `state`| `object` | Spiel-spezifischer Zustand (nur bei `state`)   |
 
 **An das Spiel senden (`InputMessage`)**:
 
@@ -35,10 +36,10 @@ Jede Nachricht hat ein **Length-Prefix**:
 
 ## Ablauf
 
-1. **`start`** empfangen → Achsen-Namen merken
-2. **`state`** empfangen → Spielzustand auswerten
-3. **`InputMessage`** zurücksenden → Achsen-Werte setzen
-4. Wiederhole 2-3 bis **`end`** kommt
+1. **`start`** empfangen → Achsen-Namen aus der `axes`-Liste merken.
+2. **`state`** empfangen → Den aktuellen Spielzustand auswerten.
+3. **`InputMessage`** zurücksenden → Ein JSON-Objekt mit den gewünschten `axes`-Werten schreiben.
+4. Wiederhole 2-3 bis **`end`** kommt oder die Pipe geschlossen wird.
 
 ## Beispiel: Go
 
@@ -46,38 +47,44 @@ Jede Nachricht hat ein **Length-Prefix**:
 package main
 
 import (
-    "encoding/binary"
-    "os"
+    "bufio"
+    "encoding/json"
+    "fmt"
     "math/rand"
-    pb "path/to/generated/arena"
-    "google.golang.org/protobuf/proto"
+    "os"
 )
 
+type ServerMessage struct {
+    Type string `json:"type"`
+    Axes []struct {
+        Name string `json:"name"`
+    } `json:"axes"`
+}
+
+type InputMessage struct {
+    Axes map[string]float32 `json:"axes"`
+}
+
 func main() {
-    var axes []string
-    for {
-        var length uint32
-        binary.Read(os.Stdin, binary.BigEndian, &length)
+    var axisNames []string
+    scanner := bufio.NewScanner(os.Stdin)
 
-        buf := make([]byte, length)
-        os.Stdin.Read(buf)
-
-        msg := &pb.ServerMessage{}
-        proto.Unmarshal(buf, msg)
+    for scanner.Scan() {
+        var msg ServerMessage
+        json.Unmarshal(scanner.Bytes(), &msg)
 
         switch msg.Type {
         case "start":
             for _, ax := range msg.Axes {
-                axes = append(axes, ax.Name)
+                axisNames = append(axisNames, ax.Name)
             }
         case "state":
-            resp := &pb.InputMessage{Axes: make(map[string]float32)}
-            for _, name := range axes {
+            resp := InputMessage{Axes: make(map[string]float32)}
+            for _, name := range axisNames {
                 resp.Axes[name] = rand.Float32()*2 - 1
             }
-            out, _ := proto.Marshal(resp)
-            binary.Write(os.Stdout, binary.BigEndian, uint32(len(out)))
-            os.Stdout.Write(out)
+            out, _ := json.Marshal(resp)
+            fmt.Println(string(out))
         case "end":
             return
         }
@@ -88,32 +95,27 @@ func main() {
 ## Beispiel: Python
 
 ```python
-import struct, sys
-import arena_pb2  # generiert aus arena.proto mit: protoc --python_out=. arena.proto
+import sys
+import json
+import random
 
-axes = []
+axis_names = []
 
-while True:
-    raw_len = sys.stdin.buffer.read(4)
-    if not raw_len:
-        break
-    length = struct.unpack(">I", raw_len)[0]
-    data = sys.stdin.buffer.read(length)
-
-    msg = arena_pb2.ServerMessage()
-    msg.ParseFromString(data)
-
-    if msg.type == "start":
-        axes = [ax.name for ax in msg.axes]
-    elif msg.type == "state":
-        import random
-        resp = arena_pb2.InputMessage()
-        for name in axes:
-            resp.axes[name] = random.uniform(-1, 1)
-        out = resp.SerializeToString()
-        sys.stdout.buffer.write(struct.pack(">I", len(out)))
-        sys.stdout.buffer.write(out)
-        sys.stdout.buffer.flush()
-    elif msg.type == "end":
+# sys.stdin ist ein Iterator, der Zeile für Zeile liest
+for line in sys.stdin:
+    msg = json.loads(line)
+    
+    if msg["type"] == "start":
+        axis_names = [ax["name"] for ax in msg["axes"]]
+        
+    elif msg["type"] == "state":
+        response = {
+            "axes": {name: random.uniform(-1, 1) for name in axis_names}
+        }
+        # json.dumps + print erzeugt NDJSON (+ \n)
+        # flush=True ist wichtig für Echtzeit-Kommunikation
+        print(json.dumps(response), flush=True)
+        
+    elif msg["type"] == "end":
         break
 ```

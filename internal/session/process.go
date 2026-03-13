@@ -1,13 +1,11 @@
 package session
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os/exec"
 	"sync"
 
-	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
 	"github.com/BotBattleArena/ArenaFramework/internal/protocol"
 )
 
@@ -19,6 +17,9 @@ type Process struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
+
+	encoder *protocol.Encoder
+	decoder *protocol.Decoder
 
 	mu sync.Mutex
 }
@@ -49,6 +50,9 @@ func (p *Process) Start() error {
 		return fmt.Errorf("create stdout pipe for %s: %w", p.ID, err)
 	}
 
+	p.encoder = protocol.NewEncoder(p.stdin)
+	p.decoder = protocol.NewDecoder(p.stdout)
+
 	if err := p.cmd.Start(); err != nil {
 		return fmt.Errorf("start process %s (%s): %w", p.ID, p.Path, err)
 	}
@@ -56,33 +60,31 @@ func (p *Process) Start() error {
 	return nil
 }
 
-// SendServerMessage writes a ServerMessage to the process's stdin.
-func (p *Process) SendServerMessage(msg *pb.ServerMessage) error {
+// SendMessage writes a JSON message to the process's stdin.
+func (p *Process) SendMessage(msg interface{}) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.stdin == nil {
-		return fmt.Errorf("process %s: stdin not available", p.ID)
+	if p.encoder == nil {
+		return fmt.Errorf("process %s: encoder not available", p.ID)
 	}
 
-	w := bufio.NewWriter(p.stdin)
-	if err := protocol.WriteServerMessage(w, msg); err != nil {
+	if err := p.encoder.Encode(msg); err != nil {
 		return fmt.Errorf("send to %s: %w", p.ID, err)
 	}
-	return w.Flush()
+	return nil
 }
 
-// ReadInputMessage reads an InputMessage from the process's stdout.
+// ReadMessage reads a JSON message from the process's stdout into the given value.
 // This blocks until a message is available or the pipe is closed.
-func (p *Process) ReadInputMessage() (*pb.InputMessage, error) {
-	if p.stdout == nil {
-		return nil, fmt.Errorf("process %s: stdout not available", p.ID)
+func (p *Process) ReadMessage(v interface{}) error {
+	if p.decoder == nil {
+		return fmt.Errorf("process %s: decoder not available", p.ID)
 	}
-	msg, err := protocol.ReadInputMessage(p.stdout)
-	if err != nil {
-		return nil, fmt.Errorf("read from %s: %w", p.ID, err)
+	if err := p.decoder.Decode(v); err != nil {
+		return fmt.Errorf("read from %s: %w", p.ID, err)
 	}
-	return msg, nil
+	return nil
 }
 
 // Stop terminates the subprocess gracefully.

@@ -1,6 +1,6 @@
 # Architektur- und Implementierungsplan: ArenaFramework
 
-Go-Library, die ein Spiel importiert um **Input-EXEs** (Bots, Spieler, KI, etc.) als Subprozesse zu managen. Inputs sind **Achsen mit Werten von -1 bis 1**. Kommunikation über **stdin/stdout mit Length-Prefix + Protobuf**.
+Go-Library, die ein Spiel importiert um **Input-EXEs** (Bots, Spieler, KI, etc.) als Subprozesse zu managen. Inputs sind **Achsen mit Werten von -1 bis 1**. Kommunikation über **stdin/stdout mit JSON (NDJSON)**.
 
 ## Architektur
 
@@ -91,12 +91,12 @@ type Player struct {
 
 ---
 
-## Protokoll (sprachunabhängig, kein Package nötig)
+## Protokoll (sprachunabhängig, JSON-basiert)
 
-**Wire-Format**: `[4 bytes length (big-endian uint32)][N bytes protobuf]`
+**Wire-Format**: [NDJSON](https://github.com/ndjson/ndjson-spec) (Newline-Delimited JSON).
 
-```protobuf
-// arena.proto – einziges Schema
+```json
+// Beispiel: ServerMessage (Spiel -> Input)
 
 // Spiel → Input
 message ServerMessage {
@@ -119,43 +119,16 @@ message InputMessage {
 ### Input-Seite: Go (pur, kein Package)
 
 ```go
-package main
-
-import (
-    "encoding/binary"
-    "os"
-    "google.golang.org/protobuf/proto"
-    pb "pfad/zu/generiertem/arena"
-)
-
 func main() {
-    // os.Stdin/os.Stdout: Jeder Prozess hat genau ein stdin/stdout.
-    // Die Arena-Library verbindet diese Pipes beim Starten der EXE.
-    for {
-        // 1. Length-Prefix lesen (4 Bytes, Big-Endian)
-        var length uint32
-        binary.Read(os.Stdin, binary.BigEndian, &length)
+    scanner := bufio.NewScanner(os.Stdin)
+    for scanner.Scan() {
+        var msg ServerMessage
+        json.Unmarshal(scanner.Bytes(), &msg)
 
-        // 2. Protobuf-Bytes lesen
-        buf := make([]byte, length)
-        os.Stdin.Read(buf)
-
-        // 3. Deserialisieren
-        msg := &pb.ServerMessage{}
-        proto.Unmarshal(buf, msg)
-
-        // 4. Antwort: Achsen-Werte setzen
-        response := &pb.InputMessage{
-            Axes: map[string]float32{
-                "move_x": 0.5,
-                "shoot":  1.0,
-            },
-        }
-
-        // 5. Serialisieren + senden
-        out, _ := proto.Marshal(response)
-        binary.Write(os.Stdout, binary.BigEndian, uint32(len(out)))
-        os.Stdout.Write(out)
+        // Antwort senden
+        resp := InputMessage{Axes: map[string]float32{"move_x": 0.5}}
+        out, _ := json.Marshal(resp)
+        fmt.Println(string(out)) // \n delimiter
     }
 }
 ```
@@ -163,40 +136,19 @@ func main() {
 ### Input-Seite: Python (pur, kein Package)
 
 ```python
-import struct, sys
-import arena_pb2  # generiert aus arena.proto
+import sys, json
 
-while True:
-    # Lesen
-    raw_len = sys.stdin.buffer.read(4)
-    length = struct.unpack(">I", raw_len)[0]
-    data = sys.stdin.buffer.read(length)
-
-    msg = arena_pb2.ServerMessage()
-    msg.ParseFromString(data)
-
-    # Antworten
-    resp = arena_pb2.InputMessage()
-    resp.axes["move_x"] = 0.5
-    resp.axes["shoot"] = 1.0
-
-    out = resp.SerializeToString()
-    sys.stdout.buffer.write(struct.pack(">I", len(out)))
-    sys.stdout.buffer.write(out)
-    sys.stdout.buffer.flush()
+for line in sys.stdin:
+    msg = json.loads(line)
+    
+    # Antwort senden
+    resp = {"axes": {"move_x": 0.5}}
+    print(json.dumps(resp), flush=True)
 ```
 
 ---
 
-## Ordnerstruktur
-
-```
 ArenaFramework/
-│
-├── proto/                              # Protobuf-Definitionen
-│   └── arena/
-│       └── v1/
-│           └── arena.proto             # Universales Wire-Schema
 │
 ├── pkg/                                # Öffentliche Library (importierbar)
 │   └── arena/
@@ -209,13 +161,7 @@ ArenaFramework/
 │   │   ├── manager.go                  # SessionManager: Subprozesse starten/stoppen
 │   │   └── process.go                  # Einzelner Input-Prozess + Goroutinen
 │   └── protocol/
-│       ├── framing.go                  # Length-Prefix Encoding/Decoding
-│       └── codec.go                    # Protobuf Marshal/Unmarshal Wrapper
-│
-├── gen/                                # Generierter Protobuf Go-Code
-│   └── arena/
-│       └── v1/
-│           └── arena.pb.go
+│       └── codec.go                    # NDJSON Encoder/Decoder
 │
 ├── cmd/                                # Beispiel-Executables
 │   ├── tictactoe/                      # Beispiel-Spiel (importiert pkg/arena)
@@ -224,9 +170,10 @@ ArenaFramework/
 │       └── main.go
 │
 ├── docs/                               # Dokumentation
-│   └── bot-guide.md                    # Anleitung für Bot-Entwickler
+│   ├── bot-guide.md                    # Anleitung für Bot-Entwickler
+│   └── bot-schema.json                 # JSON-Schema für das Protokoll
 │
-├── Makefile                            # protoc generate, build, test
+├── Makefile                            # build, test
 ├── go.mod
 ├── go.sum
 └── README.md
@@ -234,12 +181,10 @@ ArenaFramework/
 
 | Verzeichnis | Zweck |
 |---|---|
-| `proto/` | Protobuf-Quelldateien, versioniert (`v1/`) |
 | `pkg/arena/` | Öffentliche API – das was Spiele importieren |
 | `internal/` | Private Implementierung, nicht von außen importierbar |
-| `gen/` | Generierte `.pb.go` Dateien (via `protoc`) |
 | `cmd/` | Ausführbare Beispiele |
-| `docs/` | Bot-Entwickler-Dokumentation |
+| `docs/` | Dokumentation (Guide, Schema) |
 
 ## Verification Plan
 

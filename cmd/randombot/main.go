@@ -1,14 +1,14 @@
 package main
 
 import (
-	"encoding/binary"
-	"io"
+	"bufio"
+	"encoding/json"
+	"fmt"
 	"log"
 	"math/rand"
 	"os"
 
-	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
-	"google.golang.org/protobuf/proto"
+	"github.com/BotBattleArena/ArenaFramework/pkg/arena"
 )
 
 func main() {
@@ -16,25 +16,11 @@ func main() {
 	log.Println("randombot: started")
 
 	var axisNames []string
+	scanner := bufio.NewScanner(os.Stdin)
 
-	for {
-		// Read length prefix (4 bytes, big-endian)
-		var length uint32
-		if err := binary.Read(os.Stdin, binary.BigEndian, &length); err != nil {
-			log.Printf("randombot: read error: %v", err)
-			return
-		}
-
-		// Read protobuf payload
-		buf := make([]byte, length)
-		if _, err := io.ReadFull(os.Stdin, buf); err != nil {
-			log.Printf("randombot: read payload error: %v", err)
-			return
-		}
-
-		// Decode ServerMessage
-		msg := &pb.ServerMessage{}
-		if err := proto.Unmarshal(buf, msg); err != nil {
+	for scanner.Scan() {
+		var msg arena.ServerMessage
+		if err := json.Unmarshal(scanner.Bytes(), &msg); err != nil {
 			log.Printf("randombot: unmarshal error: %v", err)
 			continue
 		}
@@ -50,7 +36,7 @@ func main() {
 
 		case "state":
 			// Respond with random axis values between -1.0 and 1.0
-			response := &pb.InputMessage{
+			response := arena.InputMessage{
 				Axes: make(map[string]float32, len(axisNames)),
 			}
 			for _, name := range axisNames {
@@ -58,23 +44,20 @@ func main() {
 			}
 
 			// Encode and send
-			out, err := proto.Marshal(response)
+			out, err := json.Marshal(response)
 			if err != nil {
 				log.Printf("randombot: marshal error: %v", err)
 				continue
 			}
-			if err := binary.Write(os.Stdout, binary.BigEndian, uint32(len(out))); err != nil {
-				log.Printf("randombot: write length error: %v", err)
-				return
-			}
-			if _, err := os.Stdout.Write(out); err != nil {
-				log.Printf("randombot: write payload error: %v", err)
-				return
-			}
+			fmt.Println(string(out)) // Println adds the newline delimiter
 
 		case "end":
 			log.Println("randombot: game ended")
 			return
 		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("randombot: scanner error: %v", err)
 	}
 }

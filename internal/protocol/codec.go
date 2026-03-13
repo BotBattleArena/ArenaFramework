@@ -1,53 +1,49 @@
 package protocol
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
-
-	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
-	"google.golang.org/protobuf/proto"
 )
 
-// WriteServerMessage encodes and writes a ServerMessage as a length-prefixed frame.
-func WriteServerMessage(w io.Writer, msg *pb.ServerMessage) error {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("marshal server message: %w", err)
-	}
-	return WriteFrame(w, data)
+// Encoder wraps an io.Writer to provide NDJSON encoding.
+type Encoder struct {
+	w io.Writer
 }
 
-// ReadServerMessage reads a length-prefixed frame and decodes it as a ServerMessage.
-func ReadServerMessage(r io.Reader) (*pb.ServerMessage, error) {
-	data, err := ReadFrame(r)
-	if err != nil {
-		return nil, err
-	}
-	msg := &pb.ServerMessage{}
-	if err := proto.Unmarshal(data, msg); err != nil {
-		return nil, fmt.Errorf("unmarshal server message: %w", err)
-	}
-	return msg, nil
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{w: w}
 }
 
-// WriteInputMessage encodes and writes an InputMessage as a length-prefixed frame.
-func WriteInputMessage(w io.Writer, msg *pb.InputMessage) error {
-	data, err := proto.Marshal(msg)
+// Encode writes a value as a JSON string followed by a newline.
+func (e *Encoder) Encode(v interface{}) error {
+	data, err := json.Marshal(v)
 	if err != nil {
-		return fmt.Errorf("marshal input message: %w", err)
+		return fmt.Errorf("marshal json: %w", err)
 	}
-	return WriteFrame(w, data)
+	if _, err := e.w.Write(append(data, '\n')); err != nil {
+		return fmt.Errorf("write json line: %w", err)
+	}
+	return nil
 }
 
-// ReadInputMessage reads a length-prefixed frame and decodes it as an InputMessage.
-func ReadInputMessage(r io.Reader) (*pb.InputMessage, error) {
-	data, err := ReadFrame(r)
-	if err != nil {
-		return nil, err
+// Decoder wraps an io.Reader to provide NDJSON decoding.
+type Decoder struct {
+	scanner *bufio.Scanner
+}
+
+func NewDecoder(r io.Reader) *Decoder {
+	return &Decoder{scanner: bufio.NewScanner(r)}
+}
+
+// Decode reads a newline-delimited JSON string and decodes it.
+func (d *Decoder) Decode(v interface{}) error {
+	if !d.scanner.Scan() {
+		if err := d.scanner.Err(); err != nil {
+			return err
+		}
+		return io.EOF
 	}
-	msg := &pb.InputMessage{}
-	if err := proto.Unmarshal(data, msg); err != nil {
-		return nil, fmt.Errorf("unmarshal input message: %w", err)
-	}
-	return msg, nil
+	return json.Unmarshal(d.scanner.Bytes(), v)
 }

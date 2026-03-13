@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/BotBattleArena/ArenaFramework/gen/go/arena/v1"
 	"github.com/BotBattleArena/ArenaFramework/internal/session"
 )
 
@@ -24,7 +23,6 @@ type Arena struct {
 	manager *session.Manager
 	running bool
 
-	onAxes       AxesHandler
 	onConnect    ConnectHandler
 	onDisconnect DisconnectHandler
 
@@ -92,7 +90,7 @@ func (a *Arena) Stop() {
 	}
 
 	// Send end message (best effort)
-	endMsg := &pb.ServerMessage{Type: "end"}
+	endMsg := &ServerMessage{Type: "end"}
 	a.manager.SendToAll(endMsg)
 
 	a.manager.StopAll()
@@ -108,7 +106,7 @@ func (a *Arena) SendState(state []byte) error {
 		return ErrNotRunning
 	}
 
-	msg := &pb.ServerMessage{
+	msg := &ServerMessage{
 		Type:  "state",
 		State: state,
 	}
@@ -124,7 +122,7 @@ func (a *Arena) SendStateTo(inputID string, state []byte) error {
 		return ErrNotRunning
 	}
 
-	msg := &pb.ServerMessage{
+	msg := &ServerMessage{
 		Type:  "state",
 		State: state,
 	}
@@ -145,7 +143,7 @@ func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]map[
 	var wg sync.WaitGroup
 
 	// Send state to all
-	msg := &pb.ServerMessage{
+	msg := &ServerMessage{
 		Type:  "state",
 		State: state,
 	}
@@ -159,12 +157,12 @@ func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]map[
 
 			ch := make(chan map[string]float32, 1)
 			go func() {
-				resp, err := a.manager.ReadFrom(inputID)
-				if err != nil {
+				var resp InputMessage
+				if err := a.manager.ReadFrom(inputID, &resp); err != nil {
 					ch <- a.defaultAxes()
 					return
 				}
-				ch <- resp.GetAxes()
+				ch <- resp.Axes
 			}()
 
 			select {
@@ -218,11 +216,6 @@ func (a *Arena) IsRunning() bool {
 	return a.running
 }
 
-// OnAxes registers a handler for incoming axis values from inputs.
-func (a *Arena) OnAxes(handler AxesHandler) {
-	a.onAxes = handler
-}
-
 // OnConnect registers a handler for when an input process connects.
 func (a *Arena) OnConnect(handler ConnectHandler) {
 	a.onConnect = handler
@@ -235,15 +228,15 @@ func (a *Arena) OnDisconnect(handler DisconnectHandler) {
 
 // --- internal helpers ---
 
-func (a *Arena) buildStartMessage() *pb.ServerMessage {
-	axes := make([]*pb.Axis, len(a.cfg.Axes))
+func (a *Arena) buildStartMessage() *ServerMessage {
+	axes := make([]Axis, len(a.cfg.Axes))
 	for i, ax := range a.cfg.Axes {
-		axes[i] = &pb.Axis{
+		axes[i] = Axis{
 			Name:  ax.Name,
 			Value: ax.Value,
 		}
 	}
-	return &pb.ServerMessage{
+	return &ServerMessage{
 		Type: "start",
 		Axes: axes,
 	}
@@ -257,19 +250,3 @@ func (a *Arena) defaultAxes() map[string]float32 {
 	return defaults
 }
 
-func (a *Arena) readLoop(inputID string) {
-	for {
-		resp, err := a.manager.ReadFrom(inputID)
-		if err != nil {
-			// Process likely exited
-			if a.onDisconnect != nil {
-				a.onDisconnect(Player{ID: inputID, Status: StatusDisconnected}, err)
-			}
-			return
-		}
-
-		if a.onAxes != nil {
-			a.onAxes(Player{ID: inputID, Status: StatusConnected}, resp.GetAxes())
-		}
-	}
-}
