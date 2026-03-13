@@ -23,7 +23,6 @@ type Arena struct {
 	manager *session.Manager
 	running bool
 
-	onAxes       AxesHandler
 	onConnect    ConnectHandler
 	onDisconnect DisconnectHandler
 
@@ -217,11 +216,6 @@ func (a *Arena) IsRunning() bool {
 	return a.running
 }
 
-// OnAxes registers a handler for incoming axis values from inputs.
-func (a *Arena) OnAxes(handler AxesHandler) {
-	a.onAxes = handler
-}
-
 // OnConnect registers a handler for when an input process connects.
 func (a *Arena) OnConnect(handler ConnectHandler) {
 	a.onConnect = handler
@@ -256,19 +250,3 @@ func (a *Arena) defaultAxes() map[string]float32 {
 	return defaults
 }
 
-func (a *Arena) readLoop(inputID string) {
-	for {
-		var resp InputMessage
-		if err := a.manager.ReadFrom(inputID, &resp); err != nil {
-			// Process likely exited
-			if a.onDisconnect != nil {
-				a.onDisconnect(Player{ID: inputID, Status: StatusDisconnected}, err)
-			}
-			return
-		}
-
-		if a.onAxes != nil {
-			a.onAxes(Player{ID: inputID, Status: StatusConnected}, resp.Axes)
-		}
-	}
-}

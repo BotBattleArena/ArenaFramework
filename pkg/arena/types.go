@@ -63,9 +63,6 @@ type InputMessage struct {
 	Axes map[string]float32 `json:"axes"`
 }
 
-// AxesHandler is called when axis values are received from an input process.
-type AxesHandler func(player Player, axes map[string]float32)
-
 // ConnectHandler is called when an input process connects.
 type ConnectHandler func(player Player)
 
