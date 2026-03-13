@@ -4,9 +4,9 @@ Go-Library für die Verwaltung von Input-EXEs (Bots, Spieler, KI) in austauschba
 
 ## Konzept
 
-Das Spiel importiert `pkg/arena` als Library. Die Arena startet alle `.exe`-Dateien aus einem Verzeichnis als Subprozesse und kommuniziert über **stdin/stdout-Pipes** mit **Protobuf** (Length-Prefix Framing).
+Das Spiel importiert `pkg/arena` als Library. Die Arena startet alle `.exe`-Dateien aus einem Verzeichnis als Subprozesse und kommuniziert über **stdin/stdout-Pipes** mit **JSON** (NDJSON - Newline Delimited JSON).
 
-Input-EXEs können in jeder Sprache geschrieben werden, die Protobuf unterstützt. Der einzige Kontrakt ist `proto/arena/v1/arena.proto`.
+Input-EXEs können in jeder Sprache geschrieben werden. Der Kontrakt wird über ein JSON-Schema definiert (`docs/bot-schema.json`).
 
 ## Quickstart
 
@@ -48,10 +48,6 @@ func main() {
         },
     })
 
-    a.OnAxes(func(p arena.Player, axes map[string]float32) {
-        // Verarbeite Achsen-Werte...
-    })
-
     a.OnConnect(func(p arena.Player) {
         // Input verbunden...
     })
@@ -73,8 +69,8 @@ func main() {
 
 Bots sind separate EXEs die über stdin/stdout kommunizieren. Protokoll:
 
-1. **Wire-Format**: `[4 bytes length (big-endian uint32)][N bytes protobuf]`
-2. **Schema**: Siehe `proto/arena/v1/arena.proto`
+1. **Wire-Format**: [NDJSON](https://github.com/ndjson/ndjson-spec) (Jede Nachricht ist ein JSON-Objekt gefolgt von einem Newline-Charakter `\n`).
+2. **Schema**: Siehe `docs/bot-schema.json`
 3. **Ablauf**: `ServerMessage` von stdin lesen → `InputMessage` auf stdout schreiben
 
 Siehe `cmd/randombot/main.go` als Referenz oder `docs/bot-guide.md` für eine ausführliche Anleitung.
@@ -82,10 +78,8 @@ Siehe `cmd/randombot/main.go` als Referenz oder `docs/bot-guide.md` für eine au
 ## Ordnerstruktur
 
 ```
-proto/arena/v1/     Protobuf-Schema
 pkg/arena/          Öffentliche Library
 internal/           Private Implementierung
-gen/                Generierter Protobuf-Code
 cmd/                Beispiel-Executables
 docs/               Dokumentation
 ```
