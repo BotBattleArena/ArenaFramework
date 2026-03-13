@@ -142,7 +142,13 @@ func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]map[
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	// Send state to all
+	// Drain any stale responses and send state
+	for _, id := range ids {
+		if proc, ok := a.manager.GetProcess(id); ok {
+			proc.DrainResponses()
+		}
+	}
+
 	msg := &ServerMessage{
 		Type:  "state",
 		State: state,
@@ -155,20 +161,20 @@ func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]map[
 		go func(inputID string) {
 			defer wg.Done()
 
-			ch := make(chan map[string]float32, 1)
+			var resp InputMessage
+			errCh := make(chan error, 1)
 			go func() {
-				var resp InputMessage
-				if err := a.manager.ReadFrom(inputID, &resp); err != nil {
-					ch <- a.defaultAxes()
-					return
-				}
-				ch <- resp.Axes
+				errCh <- a.manager.ReadFrom(inputID, &resp)
 			}()
 
 			select {
-			case axes := <-ch:
+			case err := <-errCh:
 				mu.Lock()
-				result[inputID] = axes
+				if err == nil {
+					result[inputID] = resp.Axes
+				} else {
+					result[inputID] = a.defaultAxes()
+				}
 				mu.Unlock()
 			case <-time.After(timeout):
 				mu.Lock()
