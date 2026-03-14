@@ -1,36 +1,22 @@
-.PHONY: build test clean run-example
+.PHONY: build test clean run
 
 # install dependencies
 install:
 	go mod download
 
-# Build all executables
+# build example
 build:
-	go build ./...
+	go build -o bin/tictactoe.exe ./cmd/tictactoe
+	go build -o bin/randombot.exe ./cmd/randombot
 
-# Build example binaries
-build-examples: build-go-examples
-
-build-go-examples:
-	go build -o bin/topdownshooter.exe ./cmd/topdownshooter
-	go build -o bin/shooterbot.exe ./cmd/shooterbot
-	go build -o bin/hunterbot.exe ./cmd/hunterbot
-
-# Run example: build randombot, set up inputs dir, run tictactoe
-run-example: build-examples
-	@if not exist inputs mkdir inputs
-	@copy /y bin\shooterbot.exe inputs\1shooterbot-go.exe >nul
-	@copy /y bin\hunterbot.exe inputs\2hunterbot-go.exe >nul
-	bin\topdownshooter.exe
-
-# Run tests
-test:
-	go test ./...
+# run example
+run: clean build
+	@if not exist bots\inputs mkdir bots\inputs
+	@copy /y bin\randombot.exe bots\inputs\randombot1.exe >nul
+	@copy /y bin\randombot.exe bots\inputs\randombot2.exe >nul
+	bin\tictactoe.exe
 
 # Clean build artifacts
 clean:
 	@if exist bin rmdir /s /q bin
-	@if exist inputs rmdir /s /q inputs
-	@if exist build rmdir /s /q build
-	@if exist dist rmdir /s /q dist
-	@if exist *.spec del /q *.spec
+	@if exist bots\inputs rmdir /s /q bots\inputs

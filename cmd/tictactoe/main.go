@@ -27,11 +27,11 @@ type GameState struct {
 
 func main() {
 	fmt.Println("=== Tic-Tac-Toe ===")
-	fmt.Println("Starting game with inputs from ./inputs/ directory...")
+	fmt.Println("Starting game with inputs from ./bots/inputs/ directory...")
 	fmt.Println()
 
 	a, err := arena.New(arena.Config{
-		InputDir:      "./inputs",
+		InputDir:      "./bots/inputs",
 		ActionTimeout: 5 * time.Second,
 		Axes: []arena.Axis{
 			{Name: "position", Value: 0},

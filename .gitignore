@@ -10,7 +10,7 @@
 bin/
 
 # Inputs
-inputs/
+bots/inputs/
 
 # Test binary, built with `go test -c`
 *.test

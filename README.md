@@ -19,9 +19,9 @@ go build -o bin/tictactoe.exe ./cmd/tictactoe
 go build -o bin/randombot.exe ./cmd/randombot
 
 # Inputs-Verzeichnis vorbereiten
-mkdir inputs
-cp bin/randombot.exe inputs/player1.exe
-cp bin/randombot.exe inputs/player2.exe
+mkdir bots/inputs
+cp bin/randombot.exe bots/inputs/player1.exe
+cp bin/randombot.exe bots/inputs/player2.exe
 
 # Spiel starten
 ./bin/tictactoe.exe
@@ -39,7 +39,7 @@ import (
 
 func main() {
     a, _ := arena.New(arena.Config{
-        InputDir:      "./inputs",
+        InputDir:      "./bots/inputs",
         ActionTimeout: 5 * time.Second,
         Axes: []arena.Axis{
             {Name: "move_x"},
@@ -83,3 +83,10 @@ internal/           Private Implementierung
 cmd/                Beispiel-Executables
 docs/               Dokumentation
 ```
+
+## Submodule
+Submodule hinzufügen:
+```bash
+git submodule add <repository-url> <path>
+```
+
