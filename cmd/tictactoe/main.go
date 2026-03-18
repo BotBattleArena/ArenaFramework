@@ -83,7 +83,11 @@ func main() {
 		responses := a.RequestAxes(stateForCurrent, 5*time.Second)
 
 		// Convert axis value [-1, 1] to board position [0, 8]
-		axes := responses[currentPlayer]
+		res := responses[currentPlayer]
+		if res.TimedOut {
+			fmt.Printf("Turn %d: %s timed out!\n", turn+1, currentPlayer)
+		}
+		axes := res.Axes
 		posFloat := axes["position"]
 		pos := int(math.Round(float64(posFloat+1) / 2 * 8))
 		if pos < 0 {

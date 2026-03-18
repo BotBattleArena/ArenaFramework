@@ -1,6 +1,9 @@
 package arena
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // PlayerStatus represents the connection status of an input process.
 type PlayerStatus int
@@ -42,6 +45,13 @@ type Axis struct {
 	Name string `json:"name"`
 	// Value is the default value (typically 0.0).
 	Value float32 `json:"value"`
+}
+
+// RequestResult contains the axes submitted by a bot and performance metrics.
+type RequestResult struct {
+	Axes     map[string]float32
+	Duration time.Duration
+	TimedOut bool
 }
 
 // ServerMessage is sent from the game (host) to an input process (bot).

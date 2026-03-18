@@ -130,15 +130,15 @@ func (a *Arena) SendStateTo(inputID string, state []byte) error {
 }
 
 // RequestAxes sends the current state to all inputs and waits for their axis
-// responses within the given timeout. Returns a map of inputID -> axis values.
-// Inputs that don't respond in time get default axis values.
-func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]map[string]float32 {
+// responses within the given timeout. Returns a map of inputID -> RequestResult.
+// Inputs that don't respond in time get default axis values and TimedOut=true.
+func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]RequestResult {
 	if timeout == 0 {
 		timeout = a.cfg.ActionTimeout
 	}
 
 	ids := a.manager.ProcessIDs()
-	result := make(map[string]map[string]float32, len(ids))
+	result := make(map[string]RequestResult, len(ids))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -154,6 +154,7 @@ func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]map[
 		State: state,
 	}
 	a.manager.SendToAll(msg)
+	sendTime := time.Now()
 
 	// Wait for responses in parallel
 	for _, id := range ids {
@@ -169,16 +170,30 @@ func (a *Arena) RequestAxes(state []byte, timeout time.Duration) map[string]map[
 
 			select {
 			case err := <-errCh:
+				elapsed := time.Since(sendTime)
 				mu.Lock()
 				if err == nil {
-					result[inputID] = resp.Axes
+					result[inputID] = RequestResult{
+						Axes:     resp.Axes,
+						Duration: elapsed,
+						TimedOut: false,
+					}
 				} else {
-					result[inputID] = a.defaultAxes()
+					result[inputID] = RequestResult{
+						Axes:     a.defaultAxes(),
+						Duration: elapsed,
+						TimedOut: true,
+					}
 				}
 				mu.Unlock()
 			case <-time.After(timeout):
+				elapsed := time.Since(sendTime)
 				mu.Lock()
-				result[inputID] = a.defaultAxes()
+				result[inputID] = RequestResult{
+					Axes:     a.defaultAxes(),
+					Duration: elapsed,
+					TimedOut: true,
+				}
 				mu.Unlock()
 			}
 		}(id)
