@@ -73,6 +73,35 @@ Bots sind separate EXEs die über stdin/stdout kommunizieren. Protokoll:
 2. **Schema**: Siehe `docs/bot-schema.json`
 3. **Ablauf**: `ServerMessage` von stdin lesen → `InputMessage` auf stdout schreiben
 
+**Communication Workflow:**
+
+```mermaid
+sequenceDiagram
+    participant S as Server (ArenaFramework)
+    participant B as Bot (Input-EXE)
+
+    Note over S,B: Phase 1: Framework Init
+    S->>B: Startet Subprozess
+    S->>B: ServerMessage { "type": "start", "axes": [...] }
+    Note right of B: Bot initialisiert sich
+
+    Note over S,B: Phase 2: Game Loop
+    loop Jeder Tick
+        S->>B: ServerMessage { "type": "state", "state": { ... } }
+        Note right of S: Framework wartet auf Antwort<br/>(max. ActionTimeout)
+        
+        alt Antwort innerhalb Timeout
+            B-->>S: InputMessage { "axes": { "move_x": 0.5, ... } }
+        else Timeout erreicht
+            S--xS: Verwendet Default-Werte
+        end
+    end
+
+    Note over S,B: Phase 3: Game End
+    S->>B: ServerMessage { "type": "end" }
+    S--xB: Beendet Subprozess
+```
+
 Siehe `cmd/randombot/main.go` als Referenz oder `docs/bot-guide.md` für eine ausführliche Anleitung.
 
 ## Ordnerstruktur
