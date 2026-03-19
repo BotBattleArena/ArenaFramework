@@ -23,6 +23,7 @@ type Process struct {
 	decoder *protocol.Decoder
 
 	respCh chan json.RawMessage
+	sendCh chan interface{}
 	stopCh chan struct{}
 	mu     sync.Mutex
 }
@@ -33,6 +34,7 @@ func NewProcess(id, path string) *Process {
 		ID:     id,
 		Path:   path,
 		respCh: make(chan json.RawMessage, 1),
+		sendCh: make(chan interface{}, 1),
 		stopCh: make(chan struct{}),
 	}
 }
@@ -62,25 +64,52 @@ func (p *Process) Start() error {
 		return fmt.Errorf("start process %s (%s): %w", p.ID, p.Path, err)
 	}
 
-	// Start background reader
+	// Start background reader and writer
 	go p.readerLoop()
+	go p.writerLoop()
 
 	return nil
 }
 
-// SendMessage writes a JSON message to the process's stdin.
+// SendMessage queues a JSON message to be written to the process's stdin.
+// It is non-blocking; if the send buffer is full, it replaces the oldest message.
 func (p *Process) SendMessage(msg interface{}) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.encoder == nil {
-		return fmt.Errorf("process %s: encoder not available", p.ID)
+	select {
+	case <-p.stopCh:
+		return fmt.Errorf("process %s is stopped", p.ID)
+	default:
 	}
 
-	if err := p.encoder.Encode(msg); err != nil {
-		return fmt.Errorf("send to %s: %w", p.ID, err)
+	select {
+	case p.sendCh <- msg:
+	default:
+		// Channel is full. Drain the old message, then put the new one.
+		select {
+		case <-p.sendCh:
+		default:
+		}
+		select {
+		case p.sendCh <- msg:
+		default:
+		}
 	}
 	return nil
+}
+
+func (p *Process) writerLoop() {
+	for {
+		select {
+		case msg := <-p.sendCh:
+			p.mu.Lock()
+			enc := p.encoder
+			p.mu.Unlock()
+			if enc != nil {
+				_ = enc.Encode(msg) // Ignore block/error; if stdout stops, it stops.
+			}
+		case <-p.stopCh:
+			return
+		}
+	}
 }
 
 func (p *Process) readerLoop() {
