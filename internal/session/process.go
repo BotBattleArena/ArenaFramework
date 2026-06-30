@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sync"
 
@@ -45,6 +46,7 @@ func (p *Process) Start() error {
 	defer p.mu.Unlock()
 
 	p.cmd = exec.Command(p.Path)
+	p.cmd.Stderr = os.Stderr
 
 	var err error
 	p.stdin, err = p.cmd.StdinPipe()
